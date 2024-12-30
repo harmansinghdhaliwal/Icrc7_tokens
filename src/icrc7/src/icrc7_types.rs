@@ -334,7 +334,7 @@ pub type Icrc7TokenMetadata = BTreeMap<String, Value>;
 pub struct MintArg {
     pub from_subaccount: Option<Subaccount>,
     pub to: Account,
-    pub token_id: u128,
+    //pub token_id: u128,
     pub memo: Option<Vec<u8>>,
     // if None, then the combination of Collection's symbol and token's id will be provided
     // for e.g.: "ICRC7 100"
@@ -344,6 +344,20 @@ pub struct MintArg {
 }
 
 pub type MintResult = Result<u128, MintError>;
+
+#[derive(CandidType, Deserialize, Clone)]
+pub struct MintBatchArgs {
+    pub from_subaccount: Option<Subaccount>,
+    pub to: Account,
+    pub bundle_size: usize,            
+    pub memo: Option<Vec<u8>>,
+    pub token_name: Option<String>, 
+    pub token_description: Option<String>, 
+    pub token_logo: Option<String>,        
+}
+
+pub type MintBatchResult = Result<Vec<u128>, MintError>;
+
 
 #[derive(CandidType, Deserialize, Clone)]
 pub struct BurnArg {

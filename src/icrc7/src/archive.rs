@@ -49,6 +49,8 @@ pub async fn create_archive_canister(arg: ArchiveCreateArgs) -> Result<Principal
                 memory_allocation: None,
                 freezing_threshold: None,
                 reserved_cycles_limit: None,
+                log_visibility: todo!(),
+                wasm_memory_limit: todo!(),
             }),
         },
         ARCHIVE_DEFAULT_CYCLES,

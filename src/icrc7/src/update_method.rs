@@ -1,5 +1,5 @@
 use candid::Principal;
-use ic_cdk_macros::update;
+use ic_cdk::update;
 
 use crate::{
     guards::owner_guard, state::STATE, BurnArg, BurnResult, MintArg, MintResult, TransferArg,

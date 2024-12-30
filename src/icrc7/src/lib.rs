@@ -1,4 +1,4 @@
-use ic_cdk_macros::export_candid;
+//use ic_cdk_macros::export_candid;
 
 pub mod icrc7_types;
 pub mod icrc37_types;
@@ -20,4 +20,6 @@ pub mod archive;
 
 use icrc7_types::*;
 
-export_candid!();
+
+//export_candid!();
+ic_cdk::export_candid!();

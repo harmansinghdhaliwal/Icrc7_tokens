@@ -19,7 +19,7 @@ use crate::{
         Tip, TransactionRange,
     },
     icrc7_types::{
-        BurnResult, Icrc7TokenMetadata, MintArg, MintResult, Transaction, TransactionType,
+        BurnResult, Icrc7TokenMetadata, MintArg, MintResult, MintBatchArgs, MintBatchResult, Transaction, TransactionType,
         TransferArg, TransferResult,
     },
     memory::{
@@ -157,7 +157,7 @@ impl Default for State {
             permitted_drift: None,
             tokens: get_token_map_memory(),
             txn_count: 0,
-            next_token_id: 0,
+            next_token_id: 1,
             txn_ledger: get_log_memory(),
             archive_log_canister: None,
             sync_pending_txn_ids: None,
@@ -585,41 +585,52 @@ impl State {
                 });
             }
         }
-        if &arg.token_id < &self.next_token_id {
-            return Err(MintError::TokenIdMinimumLimit);
-        }
-        if let Some(_) = self.tokens.get(&arg.token_id) {
-            return Err(MintError::TokenIdAlreadyExist);
-        }
         Ok(())
     }
 
     pub fn mint(&mut self, caller: &Principal, mut arg: MintArg) -> MintResult {
+        // Generate the next token ID automatically
+        let token_id = self.next_token_id;
+    
+        // Ensure token_id is unique
+        if self.tokens.contains_key(&token_id) {
+            return Err(MintError::TokenIdAlreadyExist);
+        }
+        
         let caller = account_transformer(Account {
             owner: caller.clone(),
             subaccount: arg.from_subaccount,
         });
         arg.to = account_transformer(arg.to);
+    
+        // Perform validation using mock_mint
         self.mock_mint(&caller, &arg)?;
+    
+        // Generate token name if not provided
         let token_name = arg.token_name.unwrap_or_else(|| {
-            let name = format!("{} {}", self.icrc7_symbol, arg.token_id);
+            let name = format!("{} {}", self.icrc7_symbol, token_id);
             name
         });
+    
+        // Create a new token
         let token = Icrc7Token::new(
-            arg.token_id,
+            token_id,
             token_name.clone(),
             arg.token_description.clone(),
             arg.token_logo,
             arg.to.clone(),
         );
         let token_metadata = token.token_metadata();
-        self.tokens.insert(arg.token_id, token);
+    
+        // Update state
+        self.tokens.insert(token_id, token);
         self.icrc7_total_supply += 1;
-        self.next_token_id = arg.token_id + 1;
-
+        self.next_token_id += 1; // Increment token_id for the next mint
+    
+        // Log the transaction
         let txn_id = self.log_transaction(
             TransactionType::Mint {
-                tid: arg.token_id,
+                tid: token_id,
                 from: caller,
                 to: arg.to,
                 meta: token_metadata,
@@ -627,8 +638,35 @@ impl State {
             ic_cdk::api::time(),
             arg.memo,
         );
+    
         Ok(txn_id)
     }
+
+    pub fn mint_batch_supplier(&mut self, caller: &Principal, args: MintBatchArgs) -> MintBatchResult {
+        let mut transaction_ids = Vec::new();
+        let fixed_count = 10; // Supplier logic: 10 tokens per bundle
+    
+        for _ in 0..args.bundle_size {
+            for _ in 0..fixed_count {
+                let mint_arg = MintArg {
+                    from_subaccount: args.from_subaccount.clone(),
+                    to: args.to.clone(),
+                    memo: args.memo.clone(),
+                    token_name: args.token_name.clone(),
+                    token_description: args.token_description.clone(),
+                    token_logo: args.token_logo.clone(),
+                };
+    
+                // Call the `mint` function for each token
+                let txn_id = self.mint(caller, mint_arg)?;
+                transaction_ids.push(txn_id);
+            }
+        }
+    
+        // Return all transaction IDs as a successful batch result
+        Ok(transaction_ids)
+    }
+    
 
     fn mock_burn(&self, caller: &Account, arg: &BurnArg) -> Result<(), BurnError> {
         if let Some(ref memo) = arg.memo {

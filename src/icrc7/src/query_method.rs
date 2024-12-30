@@ -1,10 +1,10 @@
 use candid::Principal;
-use ic_cdk_macros::query;
+use ic_cdk::query;
 use icrc_ledger_types::icrc1::account::Account;
 
 use crate::{icrc7_types::Transaction, state::STATE, Icrc7TokenMetadata, Standard};
 
-#[query]
+#[ic_cdk::query]
 pub fn icrc7_symbol() -> String {
     STATE.with(|s| s.borrow().icrc7_symbol())
 }
