@@ -19,7 +19,7 @@ use crate::{
         Tip, TransactionRange,
     },
     icrc7_types::{
-        BurnResult, Icrc7TokenMetadata, MintArg, MintResult, MintBatchArgs, MintBatchResult, Transaction, TransactionType,
+        BurnResult, Icrc7TokenMetadata, MintArg, MintResult, MintBatchArgs, MintBatchResult, MintBatchCustomerArgs, Transaction, TransactionType,
         TransferArg, TransferResult,
     },
     memory::{
@@ -41,6 +41,13 @@ use icrc_ledger_types::{
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Serialize, Deserialize)]
+pub enum TokenType {
+    FixedSkutok,
+    FloatingSkutok,
+}
+
+
 #[derive(CandidType, Serialize, Deserialize, Clone)]
 pub struct Icrc7Token {
     pub token_id: u128,
@@ -48,6 +55,7 @@ pub struct Icrc7Token {
     pub token_description: Option<String>,
     pub token_logo: Option<String>,
     pub token_owner: Account,
+    pub token_type: Option<TokenType>,
 }
 
 impl Storable for Icrc7Token {
@@ -69,6 +77,7 @@ impl Icrc7Token {
         token_description: Option<String>,
         token_logo: Option<String>,
         token_owner: Account,
+        token_type: Option<TokenType>,
     ) -> Self {
         Self {
             token_id,
@@ -76,6 +85,7 @@ impl Icrc7Token {
             token_logo,
             token_owner,
             token_description,
+            token_type,
         }
     }
 
@@ -565,6 +575,33 @@ impl State {
                 return Err(MintError::SupplyCapReached);
             }
         }
+        // let minting_authority = match &self.minting_authority {
+        //     Some(auth) => auth,
+        //     None => {
+        //         return Err(MintError::GenericBatchError {
+        //             error_code: 6,
+        //             message: "Minting Authority Not Set".into(),
+        //         })
+        //     }
+        // };
+
+        // ic_cdk::println!(
+        //     "princiapal of Caller of mock_mint on canister: {}",
+        //     caller.owner.to_text()
+        // );
+        // ic_cdk::println!(
+        //     "principal of minting_authority of mock_mint on canister: {}",
+        //     minting_authority.owner.to_text()
+        // );
+    
+        // // Updated comparison: Only compare the `owner` (Principal) and handle subaccount separately
+        // if caller.owner != minting_authority.owner {
+        //     return Err(MintError::Unauthorized);
+        // }
+    
+        // if caller.subaccount.is_some() && caller.subaccount != minting_authority.subaccount {
+        //     return Err(MintError::Unauthorized);
+        // }
         if let None = self.minting_authority {
             return Err(MintError::GenericBatchError {
                 error_code: 6,
@@ -574,6 +611,7 @@ impl State {
         if Some(*caller) != self.minting_authority {
             return Err(MintError::Unauthorized);
         }
+    
         if let Some(ref memo) = arg.memo {
             let allowed_memo_length = self
                 .icrc7_max_memo_size
@@ -588,7 +626,7 @@ impl State {
         Ok(())
     }
 
-    pub fn mint(&mut self, caller: &Principal, mut arg: MintArg) -> MintResult {
+    pub fn mint(&mut self, caller: &Principal, mut arg: MintArg, token_type: Option<TokenType>) -> MintResult {
         // Generate the next token ID automatically
         let token_id = self.next_token_id;
     
@@ -619,11 +657,12 @@ impl State {
             arg.token_description.clone(),
             arg.token_logo,
             arg.to.clone(),
+            token_type,
         );
         let token_metadata = token.token_metadata();
     
         // Update state
-        self.tokens.insert(token_id, token);
+        self.tokens.insert(token_id, token.clone());
         self.icrc7_total_supply += 1;
         self.next_token_id += 1; // Increment token_id for the next mint
     
@@ -639,11 +678,11 @@ impl State {
             arg.memo,
         );
     
-        Ok(txn_id)
+        Ok(token.clone())
     }
 
     pub fn mint_batch_supplier(&mut self, caller: &Principal, args: MintBatchArgs) -> MintBatchResult {
-        let mut transaction_ids = Vec::new();
+        let mut token_ids = Vec::new();
         let fixed_count = 10; // Supplier logic: 10 tokens per bundle
     
         for _ in 0..args.bundle_size {
@@ -658,14 +697,70 @@ impl State {
                 };
     
                 // Call the `mint` function for each token
-                let txn_id = self.mint(caller, mint_arg)?;
-                transaction_ids.push(txn_id);
+                let token_id = self.mint(caller, mint_arg, None)?;
+                token_ids.push(token_id);
             }
         }
     
         // Return all transaction IDs as a successful batch result
-        Ok(transaction_ids)
+        Ok(token_ids)
     }
+
+    pub fn mint_batch_customer(
+        &mut self,
+        caller: &Principal,
+        args: MintBatchCustomerArgs,
+    ) -> MintBatchResult {
+        let mut token_ids = Vec::new();
+    
+        // Determine the token allocation logic based on subscription type
+        let (fixed_count, floating_count) = match args.subscription_type.as_str() {
+            "monthly" => (9, 1), // 9 fixed SKUTOKs, 1 floating SKUTOK
+            "prepaid" => (199, 0), // 199 fixed SKUTOKs, 0 floating SKUTOK
+            _ => {
+                return Err(MintError::GenericBatchError {
+                    error_code: 101,
+                    message: "Invalid subscription type. Use 'monthly' or 'prepaid'.".into(),
+                });
+            }
+        };
+    
+        for _ in 0..args.bundle_size {
+            // Mint fixed SKUTOKs
+            for _ in 0..fixed_count {
+                let mint_arg = MintArg {
+                    from_subaccount: args.from_subaccount.clone(),
+                    to: args.to.clone(),
+                    memo: args.memo.clone(),
+                    token_name: None,
+                    token_description: Some("Fixed SKUTOK".to_string()),
+                    token_logo: args.token_logo.clone(),
+                };
+    
+                let token_id = self.mint(caller, mint_arg, Some(TokenType::FixedSkutok))?;
+                token_ids.push(token_id);
+            }
+    
+            // Mint floating SKUTOKs (if applicable)
+            for _ in 0..floating_count {
+                let mint_arg = MintArg {
+                    from_subaccount: args.from_subaccount.clone(),
+                    to: args.to.clone(),
+                    memo: args.memo.clone(),
+                    token_name: None,
+                    token_description: Some("Floating SKUTOK".to_string()),
+                    token_logo: args.token_logo.clone(),
+                };
+    
+                let token_id = self.mint(caller, mint_arg, Some(TokenType::FloatingSkutok))?;
+                token_ids.push(token_id);
+            }
+        }
+    
+        Ok(token_ids)
+    }
+    
+    
     
 
     fn mock_burn(&self, caller: &Account, arg: &BurnArg) -> Result<(), BurnError> {

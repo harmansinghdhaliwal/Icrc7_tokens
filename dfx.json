@@ -1,10 +1,5 @@
 {
   "canisters": {
-    "icrc7_launchpad": {
-      "candid": "src/icrc7_launchpad/icrc7_launchpad.did",
-      "package": "icrc7_launchpad",
-      "type": "rust"
-    },
     "icrc7": {
       "candid": "src/icrc7/icrc7.did",
       "package": "icrc7",

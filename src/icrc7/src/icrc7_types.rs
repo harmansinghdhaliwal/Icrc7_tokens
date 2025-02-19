@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     errors::{BurnError, InsertTransactionError, MintError, TransferError},
     icrc37_types::InitApprovalsArg,
-    icrc3_types::{Block, InitArchiveArg},
+    icrc3_types::{Block, InitArchiveArg}, state::Icrc7Token,
 };
 
 pub static TRANSACTION_TRANSFER_OP: &str = "7xfer";
@@ -343,7 +343,7 @@ pub struct MintArg {
     pub token_logo: Option<String>,
 }
 
-pub type MintResult = Result<u128, MintError>;
+pub type MintResult = Result<Icrc7Token, MintError>;
 
 #[derive(CandidType, Deserialize, Clone)]
 pub struct MintBatchArgs {
@@ -356,7 +356,20 @@ pub struct MintBatchArgs {
     pub token_logo: Option<String>,        
 }
 
-pub type MintBatchResult = Result<Vec<u128>, MintError>;
+pub type MintBatchResult = Result<Vec<Icrc7Token>, MintError>;
+
+
+#[derive(CandidType, Deserialize, Clone)]
+pub struct MintBatchCustomerArgs {
+    pub from_subaccount: Option<Subaccount>,
+    pub to: Account,
+    pub bundle_size: usize,             
+    pub subscription_type: String,     
+    pub memo: Option<Vec<u8>>,
+    pub token_name: Option<String>,
+    pub token_description: Option<String>,
+    pub token_logo: Option<String>,
+}
 
 
 #[derive(CandidType, Deserialize, Clone)]
